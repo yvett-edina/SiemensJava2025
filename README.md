@@ -13,7 +13,8 @@ This repository contains a Spring Boot application that implements a simple CRUD
 - Test thoroughly to ensure functionality is preserved
 
 ## Your Assignment
-  The Project should follow the following structure:
+  The Project should have the following structure:
+
 ![image](https://github.com/user-attachments/assets/ab45f225-ff1f-4ff7-bbaa-3d5d0c21e7b1)
 
 ⓘ
