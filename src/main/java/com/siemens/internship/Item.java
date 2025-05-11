@@ -4,6 +4,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.validation.constraints.Pattern;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -23,6 +24,10 @@ public class Item {
     private String description;
     private String status;
 
-    // Add email regex validation
+    // Added email regex validation
+    @Pattern(
+            regexp = "^[a-zA-Z0-9+_.-]+@[a-zA-Z0-9-.]+\\.[a-zA-Z]{2,6}$",
+            message = "Invalid email!"
+    )
     private String email;
 }

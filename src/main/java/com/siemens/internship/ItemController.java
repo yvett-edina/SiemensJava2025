@@ -5,10 +5,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindingResult;
+import org.springframework.validation.ObjectError;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/api/items")
@@ -22,19 +24,25 @@ public class ItemController {
         return new ResponseEntity<>(itemService.findAll(), HttpStatus.OK);
     }
 
+    // changed the return type to Object so I can return the error messages
+    // or the Item upon successful creation
     @PostMapping
-    public ResponseEntity<Item> createItem(@Valid @RequestBody Item item, BindingResult result) {
+    public ResponseEntity<Object> createItem(@Valid @RequestBody Item item, BindingResult result) {
         if (result.hasErrors()) {
-            return new ResponseEntity<>(null, HttpStatus.CREATED);
+            List<String> errorMsg = result.getAllErrors().stream().map(ObjectError::getDefaultMessage).toList();
+
+            // returns 400 Bad Request with validation error instead of returning 201 Created
+            return new ResponseEntity<>(errorMsg, HttpStatus.BAD_REQUEST);
         }
-        return new ResponseEntity<>(itemService.save(item), HttpStatus.BAD_REQUEST);
+        // returns 201 Created with validation error instead of returning 400 Bad Request
+        return new ResponseEntity<>(itemService.save(item), HttpStatus.CREATED);
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<Item> getItemById(@PathVariable Long id) {
         return itemService.findById(id)
                 .map(item -> new ResponseEntity<>(item, HttpStatus.OK))
-                .orElse(new ResponseEntity<>(HttpStatus.NO_CONTENT));
+                .orElse(new ResponseEntity<>(HttpStatus.NOT_FOUND));
     }
 
     @PutMapping("/{id}")
@@ -42,20 +50,22 @@ public class ItemController {
         Optional<Item> existingItem = itemService.findById(id);
         if (existingItem.isPresent()) {
             item.setId(id);
-            return new ResponseEntity<>(itemService.save(item), HttpStatus.CREATED);
+            return new ResponseEntity<>(itemService.save(item), HttpStatus.OK);
         } else {
-            return new ResponseEntity<>(HttpStatus.ACCEPTED);
+            // changed it so we know the item was not found
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteItem(@PathVariable Long id) {
         itemService.deleteById(id);
-        return new ResponseEntity<>(HttpStatus.CONFLICT);
+        // changed it so we get more appropriate message
+        return new ResponseEntity<>(HttpStatus.NOT_FOUND);
     }
 
     @GetMapping("/process")
-    public ResponseEntity<List<Item>> processItems() {
-        return new ResponseEntity<>(itemService.processItemsAsync(), HttpStatus.OK);
+    public CompletableFuture<ResponseEntity<List<Item>>> processItems() {
+        return itemService.processItemsAsync().thenApply(items -> new ResponseEntity<>(items, HttpStatus.OK));
     }
 }

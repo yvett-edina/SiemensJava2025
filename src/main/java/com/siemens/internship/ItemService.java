@@ -8,14 +8,16 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 public class ItemService {
     @Autowired
     private ItemRepository itemRepository;
     private static ExecutorService executor = Executors.newFixedThreadPool(10);
-    private List<Item> processedItems = new ArrayList<>();
-    private int processedCount = 0;
+    // use thread-safe collection
+    private List<Item> processedItems = new CopyOnWriteArrayList<>();
+    private AtomicInteger processedCount = new AtomicInteger(0);
 
 
     public List<Item> findAll() {
@@ -53,13 +55,27 @@ public class ItemService {
      * Examine how errors are handled and propagated
      * Consider the interaction between Spring's @Async and CompletableFuture
      */
+
+    /* Explanation of what was wrong with the code before:
+        -processItemsAsync() method is annotated with @Async but doesn't return
+         a Future, just a plain List
+        -processedItems & processedCount are not thread-safe
+        -main thread returns processedItems before the async tasks completes(
+        it may still be empty or incomplete bc async tasks still running)
+        -the error msg is not clear enough
+    */
+
+    //changed the return type bc @Async requires it
     @Async
-    public List<Item> processItemsAsync() {
+    public CompletableFuture<List<Item>> processItemsAsync() {
 
         List<Long> itemIds = itemRepository.findAllIds();
 
+        // for processing items asynchronously
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
+
         for (Long id : itemIds) {
-            CompletableFuture.runAsync(() -> {
+            CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
                 try {
                     Thread.sleep(100);
 
@@ -68,20 +84,22 @@ public class ItemService {
                         return;
                     }
 
-                    processedCount++;
-
                     item.setStatus("PROCESSED");
                     itemRepository.save(item);
                     processedItems.add(item);
 
+                    processedCount.incrementAndGet();
+
                 } catch (InterruptedException e) {
-                    System.out.println("Error: " + e.getMessage());
+                    System.out.println("Error processing item with id " + id + ": " + e.getMessage());
                 }
             }, executor);
+
+            futures.add(future);
         }
 
-        return processedItems;
+        CompletableFuture<Void> allOf = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
+
+        return allOf.thenApply(v -> processedItems);
     }
-
 }
-
